@@ -17,21 +17,5 @@ services:
       timeout: 5s
       retries: 5
     
-  mysql:
-    image: mysql:8.0
-    environment:
-      MYSQL_DATABASE: test_db
-      MYSQL_USER: test_user
-      MYSQL_PASSWORD: test_pass
-      MYSQL_ROOT_PASSWORD: root_pass
-    ports:
-      - "3306:3306"
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "test_user", "-ptest_pass"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    command: --default-authentication-plugin=mysql_native_password
-
   # SQLite doesn't need a container (file-based database)
   # We'll use in-memory SQLite for testing: ":memory:"
