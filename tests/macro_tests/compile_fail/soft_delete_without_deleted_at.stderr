@@ -1,0 +1,10 @@
+error: Soft delete enabled but no 'deleted_at' field found. Add 'pub deleted_at: Option<DateTime<Utc>>' to your struct
+  --> tests/macro_tests/compile_fail/soft_delete_without_deleted_at.rs:8:1
+   |
+8  | / #[repository(table = "users")]
+9  | | #[repository(soft_delete)]  // This should fail without deleted_at field
+10 | | pub struct User {
+11 | |     pub id: i32,
+...  |
+17 | | }
+   | |_^

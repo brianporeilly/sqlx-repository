@@ -20,8 +20,8 @@ exclude = [
 members = ["sqlx-repository-macros"]
 
 [dependencies]
-sqlx = { version = "0.7", default-features = false }
-tokio = { version = "1.0", default-features = false }
+sqlx = { version = "0.7", default-features = false, features = ["macros"] }
+tokio = { version = "1.0", default-features = false, features = ["macros"] }
 async-trait = "0.1"
 serde = { version = "1.0", features = ["derive"] }
 chrono = { version = "0.4", features = ["serde"] }
@@ -40,7 +40,7 @@ serde_json = "1.0"
 
 [features]
 default = ["postgres", "macros"]
-postgres = ["sqlx/postgres", "sqlx/runtime-tokio-rustls"]
+postgres = ["sqlx/postgres", "sqlx/runtime-tokio-rustls", "sqlx/chrono"]
 mysql = ["sqlx/mysql", "sqlx/runtime-tokio-rustls"]
 sqlite = ["sqlx/sqlite", "sqlx/runtime-tokio-rustls"]
 macros = ["sqlx-repository-macros"]
