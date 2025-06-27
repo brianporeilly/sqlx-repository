@@ -1,0 +1,62 @@
+[package]
+name = "sqlx-repository"
+version = "0.1.0"
+edition = "2021"
+description = "Type-safe repository pattern with derive macros for sqlx"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/yourusername/sqlx-repository"
+documentation = "https://docs.rs/sqlx-repository"
+homepage = "https://github.com/yourusername/sqlx-repository"
+keywords = ["database", "sqlx", "repository", "crud", "postgres"]
+categories = ["database"]
+readme = "README.md"
+exclude = [
+    "/.github/",
+    "/target/",
+    "/.gitignore"
+]
+
+[workspace]
+members = ["sqlx-repository-macros"]
+
+[dependencies]
+sqlx = { version = "0.7", default-features = false }
+tokio = { version = "1.0", default-features = false }
+async-trait = "0.1"
+serde = { version = "1.0", features = ["derive"] }
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "1.0"
+sqlx-repository-macros = { version = "0.1.0", path = "sqlx-repository-macros", optional = true }
+
+[dev-dependencies]
+testcontainers = "0.15"
+tokio-test = "0.4"
+uuid = { version = "1.0", features = ["v4"] }
+trybuild = "1.0"
+criterion = "0.5"
+rstest = "0.18"
+mockall = "0.11"
+serde_json = "1.0"
+
+[features]
+default = ["postgres", "macros"]
+postgres = ["sqlx/postgres", "sqlx/runtime-tokio-rustls"]
+mysql = ["sqlx/mysql", "sqlx/runtime-tokio-rustls"]
+sqlite = ["sqlx/sqlite", "sqlx/runtime-tokio-rustls"]
+macros = ["sqlx-repository-macros"]
+migrate = ["sqlx/migrate"]
+
+# Internal features for testing
+_rt-tokio = ["sqlx/runtime-tokio-rustls", "tokio/rt-multi-thread", "tokio/macros"]
+
+[[example]]
+name = "basic_usage"
+required-features = ["postgres", "_rt-tokio"]
+
+[[bench]]
+name = "repository_crud"
+harness = false
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

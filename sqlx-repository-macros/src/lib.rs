@@ -1,0 +1,352 @@
+//! Derive macros for sqlx-repository
+//!
+//! This crate provides the `Repository` derive macro that automatically generates
+//! repository implementations with CRUD operations, search functionality, and
+//! type-safe Create/Update structs.
+
+use proc_macro::TokenStream;
+use quote::quote;
+use syn::{parse_macro_input, DeriveInput, Data, Fields, Attribute, Meta, Lit, Expr};
+
+/// Derive macro for generating repository implementations
+///
+/// This macro generates a complete repository implementation with:
+/// - Repository struct with database pool
+/// - Create and Update types for type-safe mutations
+/// - Full implementation of the Repository trait
+///
+/// # Attributes
+///
+/// - `#[repository(table = "table_name")]` - Specify custom table name
+/// - `#[repository(soft_delete)]` - Enable soft delete functionality
+/// - `#[repository(searchable_fields(field1, field2))]` - Fields for text search
+/// - `#[repository(filterable_fields(field1, field2))]` - Fields for filtering
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// #[derive(Repository)]
+/// #[repository(table = "users")]
+/// #[repository(soft_delete)]
+/// #[repository(searchable_fields(name, email))]
+/// #[repository(filterable_fields(status, department))]
+/// pub struct User {
+///     pub id: i32,
+///     pub name: String,
+///     pub email: String,
+///     pub status: String,
+///     pub department: String,
+///     pub created_at: chrono::DateTime<chrono::Utc>,
+///     pub updated_at: chrono::DateTime<chrono::Utc>,
+///     pub deleted_at: Option<chrono::DateTime<chrono::Utc>>,
+/// }
+/// ```
+///
+/// This generates:
+/// - `UserRepository` struct
+/// - `CreateUser` struct (excluding id, timestamps)
+/// - `UpdateUser` struct (Optional fields for partial updates)
+/// - Full Repository trait implementation
+#[proc_macro_derive(Repository, attributes(repository))]
+pub fn derive_repository(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let name = &input.ident;
+    let repository_name = quote::format_ident!("{}Repository", name);
+    let create_type = quote::format_ident!("Create{}", name);
+    let update_type = quote::format_ident!("Update{}", name);
+
+    // Extract attributes
+    let table_name = extract_table_name(&input.attrs)
+        .unwrap_or_else(|| pluralize(&name.to_string().to_lowercase()));
+    let soft_delete = has_repository_attribute(&input.attrs, "soft_delete");
+    let searchable_fields = extract_field_list(&input.attrs, "searchable_fields");
+    let filterable_fields = extract_field_list(&input.attrs, "filterable_fields");
+
+    // Extract field information
+    let field_names = extract_field_names(&input);
+    let create_fields = generate_create_struct_fields(&field_names, &input);
+    let update_fields = generate_update_struct_fields(&field_names, &input);
+
+    let expanded = quote! {
+        /// Auto-generated Create type for new entity creation
+        #[derive(Debug, Clone, serde::Deserialize)]
+        pub struct #create_type {
+            #(#create_fields),*
+        }
+
+        /// Auto-generated Update type for entity updates
+        #[derive(Debug, Clone, serde::Deserialize)]
+        pub struct #update_type {
+            #(#update_fields),*
+        }
+
+        /// Auto-generated Repository implementation
+        pub struct #repository_name {
+            pool: sqlx::PgPool,
+        }
+
+        impl #repository_name {
+            /// Create a new repository instance with the given database pool
+            pub fn new(pool: sqlx::PgPool) -> Self {
+                Self { pool }
+            }
+        }
+
+        #[async_trait::async_trait]
+        impl sqlx_repository::Repository<#name> for #repository_name {
+            type CreateType = #create_type;
+            type UpdateType = #update_type;
+
+            fn table_name() -> &'static str {
+                #table_name
+            }
+
+            fn soft_delete_enabled() -> bool {
+                #soft_delete
+            }
+
+            fn searchable_fields() -> &'static [&'static str] {
+                &[#(#searchable_fields),*]
+            }
+
+            fn filterable_fields() -> &'static [&'static str] {
+                &[#(#filterable_fields),*]
+            }
+
+            fn pool(&self) -> &sqlx::PgPool {
+                &self.pool
+            }
+
+            async fn create(&self, data: Self::CreateType) -> sqlx_repository::RepositoryResult<#name> {
+                let field_names = vec![#(stringify!(#field_names)),*];
+                let placeholders: Vec<String> = (1..=field_names.len()).map(|i| format!("${}", i)).collect();
+                
+                let query = if Self::soft_delete_enabled() {
+                    format!(
+                        "INSERT INTO {} ({}, created_at, updated_at) VALUES ({}, NOW(), NOW()) RETURNING *",
+                        Self::table_name(),
+                        field_names.join(", "),
+                        placeholders.join(", ")
+                    )
+                } else {
+                    format!(
+                        "INSERT INTO {} ({}) VALUES ({}) RETURNING *",
+                        Self::table_name(),
+                        field_names.join(", "),
+                        placeholders.join(", ")
+                    )
+                };
+
+                let mut query_builder = sqlx::query_as(&query);
+                #(
+                    query_builder = query_builder.bind(&data.#field_names);
+                )*
+
+                query_builder
+                    .fetch_one(self.pool())
+                    .await
+                    .map_err(sqlx_repository::RepositoryError::from)
+            }
+
+            async fn update(&self, id: i32, data: Self::UpdateType) -> sqlx_repository::RepositoryResult<Option<#name>> {
+                let mut set_parts = Vec::new();
+                let mut has_updates = false;
+                
+                #(
+                    if data.#field_names.is_some() {
+                        has_updates = true;
+                    }
+                )*
+
+                if !has_updates {
+                    return self.find_by_id(id).await;
+                }
+
+                let mut param_count = 0;
+                #(
+                    if data.#field_names.is_some() {
+                        param_count += 1;
+                        set_parts.push(format!("{} = ${}", stringify!(#field_names), param_count));
+                    }
+                )*
+
+                param_count += 1;
+                let query_str = if Self::soft_delete_enabled() {
+                    format!(
+                        "UPDATE {} SET {}, updated_at = NOW() WHERE id = ${} AND deleted_at IS NULL RETURNING *",
+                        Self::table_name(),
+                        set_parts.join(", "),
+                        param_count
+                    )
+                } else {
+                    format!(
+                        "UPDATE {} SET {} WHERE id = ${} RETURNING *",
+                        Self::table_name(),
+                        set_parts.join(", "),
+                        param_count
+                    )
+                };
+
+                let mut query_builder = sqlx::query_as(&query_str);
+                
+                #(
+                    if let Some(ref value) = data.#field_names {
+                        query_builder = query_builder.bind(value);
+                    }
+                )*
+                
+                query_builder = query_builder.bind(id);
+                
+                query_builder
+                    .fetch_optional(self.pool())
+                    .await
+                    .map_err(sqlx_repository::RepositoryError::from)
+            }
+        }
+    };
+
+    TokenStream::from(expanded)
+}
+
+/// Extract table name from repository attributes
+fn extract_table_name(attrs: &[Attribute]) -> Option<String> {
+    for attr in attrs {
+        if attr.path().is_ident("repository") {
+            if let Meta::List(meta_list) = &attr.meta {
+                if let Ok(parsed) = meta_list.parse_args::<Meta>() {
+                    if let Meta::NameValue(nv) = parsed {
+                        if nv.path.is_ident("table") {
+                            if let Expr::Lit(lit_expr) = nv.value {
+                                if let Lit::Str(lit_str) = lit_expr.lit {
+                                    return Some(lit_str.value());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Check if a repository attribute exists (like soft_delete)
+fn has_repository_attribute(attrs: &[Attribute], name: &str) -> bool {
+    for attr in attrs {
+        if attr.path().is_ident("repository") {
+            if let Meta::List(meta_list) = &attr.meta {
+                let mut found = false;
+                let _ = meta_list.parse_nested_meta(|meta| {
+                    if meta.path.is_ident(name) {
+                        found = true;
+                    }
+                    Ok(())
+                });
+                if found {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// Extract field list from repository attributes (like searchable_fields)
+fn extract_field_list(attrs: &[Attribute], attr_name: &str) -> Vec<String> {
+    for attr in attrs {
+        if attr.path().is_ident("repository") {
+            if let Meta::List(meta_list) = &attr.meta {
+                let mut fields = Vec::new();
+                let _ = meta_list.parse_nested_meta(|meta| {
+                    if meta.path.is_ident(attr_name) {
+                        if meta.input.peek(syn::token::Paren) {
+                            let content;
+                            syn::parenthesized!(content in meta.input);
+                            let field_list: syn::punctuated::Punctuated<syn::Ident, syn::Token![,]> = 
+                                content.parse_terminated(|input| input.parse(), syn::Token![,])?;
+                            for field in field_list {
+                                fields.push(field.to_string());
+                            }
+                        }
+                    }
+                    Ok(())
+                });
+                if !fields.is_empty() {
+                    return fields;
+                }
+            }
+        }
+    }
+    Vec::new()
+}
+
+/// Extract field names from struct, excluding metadata fields
+fn extract_field_names(input: &DeriveInput) -> Vec<syn::Ident> {
+    match &input.data {
+        Data::Struct(data_struct) => {
+            match &data_struct.fields {
+                Fields::Named(fields_named) => {
+                    fields_named.named.iter()
+                        .filter_map(|f| f.ident.clone())
+                        .filter(|ident| {
+                            let name = ident.to_string();
+                            !matches!(name.as_str(), "id" | "created_at" | "updated_at" | "deleted_at")
+                        })
+                        .collect()
+                }
+                _ => vec![],
+            }
+        }
+        _ => vec![],
+    }
+}
+
+/// Get the type of a specific field from the struct
+fn get_field_type<'a>(input: &'a DeriveInput, field_name: &syn::Ident) -> Option<&'a syn::Type> {
+    match &input.data {
+        Data::Struct(data_struct) => {
+            match &data_struct.fields {
+                Fields::Named(fields_named) => {
+                    fields_named.named.iter()
+                        .find(|f| f.ident.as_ref() == Some(field_name))
+                        .map(|f| &f.ty)
+                }
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
+/// Generate Create struct fields (non-optional types)
+fn generate_create_struct_fields(field_names: &[syn::Ident], input: &DeriveInput) -> Vec<proc_macro2::TokenStream> {
+    field_names.iter().map(|name| {
+        if let Some(field_type) = get_field_type(input, name) {
+            quote! { pub #name: #field_type }
+        } else {
+            quote! { pub #name: String }
+        }
+    }).collect()
+}
+
+/// Generate Update struct fields (optional types for partial updates)
+fn generate_update_struct_fields(field_names: &[syn::Ident], input: &DeriveInput) -> Vec<proc_macro2::TokenStream> {
+    field_names.iter().map(|name| {
+        if let Some(field_type) = get_field_type(input, name) {
+            quote! { pub #name: Option<#field_type> }
+        } else {
+            quote! { pub #name: Option<String> }
+        }
+    }).collect()
+}
+
+/// Simple pluralization helper
+fn pluralize(word: &str) -> String {
+    if word.ends_with('y') {
+        format!("{}ies", &word[..word.len()-1])
+    } else if word.ends_with("s") || word.ends_with("sh") || word.ends_with("ch") || word.ends_with("x") || word.ends_with("z") {
+        format!("{}es", word)
+    } else {
+        format!("{}s", word)
+    }
+}

@@ -1,0 +1,22 @@
+[package]
+name = "sqlx-repository-macros"
+version = "0.1.0"
+edition = "2021"
+description = "Derive macros for sqlx-repository"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/yourusername/sqlx-repository"
+documentation = "https://docs.rs/sqlx-repository-macros"
+keywords = ["database", "sqlx", "repository", "macros", "derive"]
+categories = ["database"]
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = { version = "2.0", features = ["full"] }
+paste = "1.0"
+
+[dev-dependencies]
+trybuild = "1.0"
