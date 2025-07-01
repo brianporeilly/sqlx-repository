@@ -1,0 +1,14 @@
+error: Primary key 'id' must be of type 'i32', found 'String'.
+
+       Currently supported: i32
+       Future versions will support: i64, Uuid
+
+       Example:
+       pub struct User {
+           pub id: i32,  // ← Must be i32
+           pub name: String,
+       }
+ --> tests/macro_tests/compile_fail/invalid_primary_key_type.rs:9:13
+  |
+9 |     pub id: String,  // Primary key must be i32 for now
+  |             ^^^^^^

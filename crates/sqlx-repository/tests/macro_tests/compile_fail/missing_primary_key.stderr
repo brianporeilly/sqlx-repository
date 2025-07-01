@@ -1,0 +1,18 @@
+error: Repository structs must have a primary key field named 'id: i32'.
+
+       Example:
+       #[derive(Repository)]
+       #[repository(table = "users")]
+       pub struct User {
+           pub id: i32,  // ← Add this field
+           pub name: String,
+           pub email: String,
+       }
+  --> tests/macro_tests/compile_fail/missing_primary_key.rs:7:1
+   |
+7  | / #[repository(table = "users")]
+8  | | pub struct User {
+9  | |     pub name: String,  // No id field and no #[repository(primary_key)] attribute
+10 | |     pub email: String,
+11 | | }
+   | |_^

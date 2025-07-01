@@ -1,0 +1,28 @@
+[workspace]
+members = [
+    "crates/sqlx-repository",
+    "crates/sqlx-repository-macros", 
+]
+resolver = "2"
+
+[workspace.metadata.docs.rs]
+# Build documentation for all features
+all-features = true
+# Use rustdoc-args for docs.rs specific settings
+rustdoc-args = ["--cfg", "docsrs"]
+
+[workspace.dependencies]
+sqlx = { version = "0.7", default-features = false }
+tokio = { version = "1.0", default-features = false }
+async-trait = "0.1"
+serde = { version = "1.0", features = ["derive"] }
+thiserror = "1.0"
+
+# Proc macro dependencies (shared between core and macros)
+syn = { version = "2.0", default-features = false }
+quote = "1.0"
+proc-macro2 = "1.0"
+
+# Development/testing (used across multiple crates)
+testcontainers = "0.15"
+tokio-test = "0.4"

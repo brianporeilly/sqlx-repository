@@ -1,0 +1,66 @@
+[package]
+name = "sqlx-repository"
+version = "0.1.0"
+edition = "2021"
+authors = ["Brian O'Reilly <brian@oreillys.io>"]
+description = "Type-safe repository pattern implementation with derive macros for sqlx"
+documentation = "https://docs.rs/sqlx-repository"
+homepage = "https://github.com/brianporeilly/sqlx-repository"
+repository = "https://github.com/brianporeilly/sqlx-repository"
+license = "MIT OR Apache-2.0"
+keywords = ["sqlx", "repository", "database", "orm", "derive"]
+categories = ["database", "web-programming", "development-tools"]
+readme = "../../README.md"
+include = [
+    "src/**/*",
+    "tests/**/*", 
+    "benches/**/*",
+    "../../README.md",
+    "../../LICENSE-*",
+]
+
+[[example]]
+name = "basic_usage"
+path = "../../examples/basic_usage.rs"
+
+[[example]]
+name = "soft_delete"
+path = "../../examples/soft_delete.rs"
+
+[[example]]
+name = "migrations"
+path = "../../examples/migrations.rs"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[dependencies]
+# Use workspace versions for shared deps
+sqlx = { workspace = true, features = ["postgres", "runtime-tokio-rustls", "macros", "chrono"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+async-trait = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+thiserror = { workspace = true }
+
+# Core-specific dependencies (not in workspace)
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.0", features = ["v4", "serde"], optional = true }
+
+# Internal workspace dependencies
+sqlx-repository-macros = { version = "0.1", path = "../sqlx-repository-macros", optional = true }
+
+[features]
+default = ["macros", "postgres"]
+macros = ["dep:sqlx-repository-macros"]
+postgres = ["sqlx/postgres"]
+# mysql = ["sqlx/mysql"] 
+# sqlite = ["sqlx/sqlite"]
+uuid = ["dep:uuid"]
+
+[dev-dependencies]
+testcontainers = { workspace = true }
+tokio-test = { workspace = true }
+trybuild = "1.0"
+serde_json = "1.0"

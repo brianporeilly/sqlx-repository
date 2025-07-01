@@ -1,0 +1,17 @@
+error: Repository derive only supports structs, not enums.
+
+       Example:
+       #[derive(Repository)]
+       #[repository(table = "users")]
+       pub struct User {
+           pub id: i32,
+           pub name: String,
+       }
+  --> tests/macro_tests/compile_fail/enum_not_supported.rs:6:1
+   |
+6  | / #[repository(table = "users")]
+7  | | pub enum User {  // This should fail - Repository only works on structs
+8  | |     Active,
+9  | |     Inactive,
+10 | | }
+   | |_^

@@ -1,0 +1,17 @@
+error: Unsupported field type 'HashMap' for field 'metadata'.
+
+       Supported types:
+       - Integers: i16, i32, i64, u16, u32, u64
+       - Floats: f32, f64
+       - Text: String, &str
+       - Boolean: bool
+       - Time: DateTime<Utc>, Date, Time
+       - Optional: Option<T> for any supported type T
+       - Collections: Vec<T> for supported types T
+       - UUID: Uuid (with uuid feature)
+
+       For complex types, consider using JSON serialization with String fields.
+  --> tests/macro_tests/compile_fail/unsupported_field_type.rs:12:19
+   |
+12 |     pub metadata: HashMap<String, String>,  // Unsupported type
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^

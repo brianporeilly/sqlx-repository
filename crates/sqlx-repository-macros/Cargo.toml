@@ -1,0 +1,33 @@
+[package]
+name = "sqlx-repository-macros"
+version = "0.1.0"
+edition = "2021"
+authors = ["Brian O'Reilly <brian@oreillys.io>"]
+description = "Derive macros for sqlx-repository"
+documentation = "https://docs.rs/sqlx-repository-macros"
+homepage = "https://github.com/brianporeilly/sqlx-repository"
+repository = "https://github.com/brianporeilly/sqlx-repository"
+license = "MIT OR Apache-2.0"
+keywords = ["sqlx", "repository", "derive", "macro", "database"]
+categories = ["database", "development-tools::procedural-macro-helpers"]
+readme = "../../README.md"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lib]
+proc-macro = true
+
+[dependencies]
+# Proc macro specific (use workspace for consistency)
+syn = { workspace = true, features = ["full"] }
+quote = { workspace = true }
+proc-macro2 = { workspace = true }
+
+# Macro-specific dependencies (not in workspace)
+darling = "0.20"  # For parsing attributes
+convert_case = "0.6"  # For naming conventions
+
+[dev-dependencies]
+trybuild = "1.0"  # For testing macro expansion
