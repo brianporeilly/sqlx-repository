@@ -1,7 +1,7 @@
 //! Core repository trait and implementations
 
 use crate::error::{RepositoryError, RepositoryResult};
-use crate::search::{SearchParams, SearchResult, SortOrder, RecordScope};
+use crate::search::{RecordScope, SearchParams, SearchResult, SortOrder};
 use async_trait::async_trait;
 use sqlx::FromRow;
 
@@ -44,7 +44,10 @@ where
     /// Find an entity by its ID
     async fn find_by_id(&self, id: i32) -> RepositoryResult<Option<T>> {
         let query = if Self::soft_delete_enabled() {
-            format!("SELECT * FROM {} WHERE id = $1 AND deleted_at IS NULL", Self::table_name())
+            format!(
+                "SELECT * FROM {} WHERE id = $1 AND deleted_at IS NULL",
+                Self::table_name()
+            )
         } else {
             format!("SELECT * FROM {} WHERE id = $1", Self::table_name())
         };
@@ -59,7 +62,10 @@ where
     /// Find all entities
     async fn find_all(&self) -> RepositoryResult<Vec<T>> {
         let query = if Self::soft_delete_enabled() {
-            format!("SELECT * FROM {} WHERE deleted_at IS NULL ORDER BY id", Self::table_name())
+            format!(
+                "SELECT * FROM {} WHERE deleted_at IS NULL ORDER BY id",
+                Self::table_name()
+            )
         } else {
             format!("SELECT * FROM {} ORDER BY id", Self::table_name())
         };
@@ -132,8 +138,12 @@ where
         };
 
         // Build count query
-        let count_query = format!("SELECT COUNT(*) FROM {}{}", Self::table_name(), where_clause);
-        
+        let count_query = format!(
+            "SELECT COUNT(*) FROM {}{}",
+            Self::table_name(),
+            where_clause
+        );
+
         // Build main query with sorting and pagination
         let sort_field = params.sort_by.as_deref().unwrap_or("id");
         let sort_order = match params.sort_order {
@@ -165,13 +175,18 @@ where
             .fetch_one(self.pool())
             .await
             .map_err(RepositoryError::from)?;
-            
+
         let items: Vec<T> = main_query_builder
             .fetch_all(self.pool())
             .await
             .map_err(RepositoryError::from)?;
 
-        Ok(SearchResult::new(items, total_count, params.page, params.per_page))
+        Ok(SearchResult::new(
+            items,
+            total_count,
+            params.page,
+            params.per_page,
+        ))
     }
 
     /// Restore a soft-deleted entity by ID
@@ -249,7 +264,11 @@ where
             format!(" WHERE {}", conditions.join(" AND "))
         };
 
-        let count_query = format!("SELECT COUNT(*) FROM {}{}", Self::table_name(), where_clause);
+        let count_query = format!(
+            "SELECT COUNT(*) FROM {}{}",
+            Self::table_name(),
+            where_clause
+        );
         let mut query_builder = sqlx::query_scalar(&count_query);
 
         for value in &bind_values {

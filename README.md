@@ -3,6 +3,8 @@
 [![Crates.io](https://img.shields.io/crates/v/sqlx-repository.svg)](https://crates.io/crates/sqlx-repository)
 [![Documentation](https://docs.rs/sqlx-repository/badge.svg)](https://docs.rs/sqlx-repository)
 [![License: MIT OR Apache-2.0](https://img.shields.io/crates/l/sqlx-repository.svg)](#license)
+[![CI](https://github.com/brianporeilly/sqlx-repository/workflows/CI/badge.svg)](https://github.com/brianporeilly/sqlx-repository/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/brianporeilly/sqlx-repository/branch/main/graph/badge.svg)](https://codecov.io/gh/brianporeilly/sqlx-repository)
 
 > **Early Development**: This crate is currently in early development. APIs may change before v1.0.0.
 

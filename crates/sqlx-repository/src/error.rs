@@ -14,7 +14,7 @@ pub enum RepositoryError {
     /// Database error from sqlx
     #[error("Database error: {0}")]
     Database(#[from] sqlx::Error),
-    
+
     /// Entity not found
     #[error("Not found: {entity} with {field} = {value}")]
     NotFound {
@@ -25,19 +25,19 @@ pub enum RepositoryError {
         /// Value that was searched for
         value: String,
     },
-    
+
     /// Validation error
     #[error("Validation error: {0}")]
     Validation(String),
-    
+
     /// Conflict error (e.g., unique constraint violation)
     #[error("Conflict: {0}")]
     Conflict(String),
-    
+
     /// Configuration error
     #[error("Configuration error: {0}")]
     Configuration(String),
-    
+
     /// Feature not supported by current database backend
     #[error("Feature '{feature}' not supported by {backend} backend")]
     UnsupportedFeature {
@@ -57,22 +57,22 @@ impl RepositoryError {
             value: value.to_string(),
         }
     }
-    
+
     /// Create a new Validation error
     pub fn validation(msg: impl std::fmt::Display) -> Self {
         Self::Validation(msg.to_string())
     }
-    
+
     /// Create a new Conflict error
     pub fn conflict(msg: impl std::fmt::Display) -> Self {
         Self::Conflict(msg.to_string())
     }
-    
+
     /// Create a new Configuration error
     pub fn configuration(msg: impl std::fmt::Display) -> Self {
         Self::Configuration(msg.to_string())
     }
-    
+
     /// Create a new UnsupportedFeature error
     pub fn unsupported_feature(feature: &str, backend: &str) -> Self {
         Self::UnsupportedFeature {

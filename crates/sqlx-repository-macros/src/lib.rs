@@ -6,7 +6,7 @@
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, DeriveInput, Data, Fields, Attribute, Meta, Lit, Expr};
+use syn::{parse_macro_input, Attribute, Data, DeriveInput, Expr, Fields, Lit, Meta};
 
 /// Derive macro for generating repository implementations
 ///
@@ -72,7 +72,7 @@ use syn::{parse_macro_input, DeriveInput, Data, Fields, Attribute, Meta, Lit, Ex
 #[proc_macro_derive(Repository, attributes(repository))]
 pub fn derive_repository(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    
+
     match derive_repository_impl(input) {
         Ok(tokens) => tokens,
         Err(err) => err.to_compile_error().into(),
@@ -88,19 +88,19 @@ fn derive_repository_impl(input: DeriveInput) -> Result<TokenStream, syn::Error>
     // Comprehensive validation first
     validate_input_struct(&input)?;
     validate_primary_key_field(&input)?;
-    
+
     // Extract attributes with fallback to pluralized struct name
     let table_name = extract_table_name(&input.attrs)
         .unwrap_or_else(|| pluralize(&name.to_string().to_lowercase()));
     let soft_delete = has_repository_attribute(&input.attrs, "soft_delete");
     let searchable_fields = extract_field_list(&input.attrs, "searchable_fields");
     let filterable_fields = extract_field_list(&input.attrs, "filterable_fields");
-    
+
     // Validate soft delete requirements
     if soft_delete {
         validate_soft_delete_fields(&input)?;
     }
-    
+
     // Validate supported field types
     validate_field_types(&input)?;
 
@@ -162,7 +162,7 @@ fn derive_repository_impl(input: DeriveInput) -> Result<TokenStream, syn::Error>
             async fn create(&self, data: Self::CreateType) -> sqlx_repository::RepositoryResult<#name> {
                 let field_names = vec![#(stringify!(#field_names)),*];
                 let placeholders: Vec<String> = (1..=field_names.len()).map(|i| format!("${}", i)).collect();
-                
+
                 let query = if Self::soft_delete_enabled() {
                     format!(
                         "INSERT INTO {} ({}, created_at, updated_at) VALUES ({}, NOW(), NOW()) RETURNING *",
@@ -193,7 +193,7 @@ fn derive_repository_impl(input: DeriveInput) -> Result<TokenStream, syn::Error>
             async fn update(&self, id: i32, data: Self::UpdateType) -> sqlx_repository::RepositoryResult<Option<#name>> {
                 let mut set_parts = Vec::new();
                 let mut has_updates = false;
-                
+
                 #(
                     if data.#field_names.is_some() {
                         has_updates = true;
@@ -230,15 +230,15 @@ fn derive_repository_impl(input: DeriveInput) -> Result<TokenStream, syn::Error>
                 };
 
                 let mut query_builder = sqlx::query_as(&query_str);
-                
+
                 #(
                     if let Some(ref value) = data.#field_names {
                         query_builder = query_builder.bind(value);
                     }
                 )*
-                
+
                 query_builder = query_builder.bind(id);
-                
+
                 query_builder
                     .fetch_optional(self.pool())
                     .await
@@ -253,13 +253,21 @@ fn derive_repository_impl(input: DeriveInput) -> Result<TokenStream, syn::Error>
 /// Validate that soft delete fields are present
 fn validate_soft_delete_fields(input: &DeriveInput) -> Result<(), syn::Error> {
     let fields = match &input.data {
-        Data::Struct(data_struct) => {
-            match &data_struct.fields {
-                Fields::Named(fields_named) => &fields_named.named,
-                _ => return Err(syn::Error::new_spanned(input, "Repository derive only supports structs with named fields")),
+        Data::Struct(data_struct) => match &data_struct.fields {
+            Fields::Named(fields_named) => &fields_named.named,
+            _ => {
+                return Err(syn::Error::new_spanned(
+                    input,
+                    "Repository derive only supports structs with named fields",
+                ))
             }
+        },
+        _ => {
+            return Err(syn::Error::new_spanned(
+                input,
+                "Repository derive only supports structs",
+            ))
         }
-        _ => return Err(syn::Error::new_spanned(input, "Repository derive only supports structs")),
     };
 
     let mut has_deleted_at = false;
@@ -274,7 +282,7 @@ fn validate_soft_delete_fields(input: &DeriveInput) -> Result<(), syn::Error> {
 
     if !has_deleted_at {
         return Err(syn::Error::new_spanned(
-            input, 
+            input,
             "Soft delete enabled but no 'deleted_at' field found. Add 'pub deleted_at: Option<DateTime<Utc>>' to your struct"
         ));
     }
@@ -336,8 +344,10 @@ fn extract_field_list(attrs: &[Attribute], attr_name: &str) -> Vec<String> {
                         if meta.input.peek(syn::token::Paren) {
                             let content;
                             syn::parenthesized!(content in meta.input);
-                            let field_list: syn::punctuated::Punctuated<syn::Ident, syn::Token![,]> = 
-                                content.parse_terminated(|input| input.parse(), syn::Token![,])?;
+                            let field_list: syn::punctuated::Punctuated<
+                                syn::Ident,
+                                syn::Token![,],
+                            > = content.parse_terminated(|input| input.parse(), syn::Token![,])?;
                             for field in field_list {
                                 fields.push(field.to_string());
                             }
@@ -357,20 +367,21 @@ fn extract_field_list(attrs: &[Attribute], attr_name: &str) -> Vec<String> {
 /// Extract field names from struct, excluding metadata fields
 fn extract_field_names(input: &DeriveInput) -> Vec<syn::Ident> {
     match &input.data {
-        Data::Struct(data_struct) => {
-            match &data_struct.fields {
-                Fields::Named(fields_named) => {
-                    fields_named.named.iter()
-                        .filter_map(|f| f.ident.clone())
-                        .filter(|ident| {
-                            let name = ident.to_string();
-                            !matches!(name.as_str(), "id" | "created_at" | "updated_at" | "deleted_at")
-                        })
-                        .collect()
-                }
-                _ => vec![],
-            }
-        }
+        Data::Struct(data_struct) => match &data_struct.fields {
+            Fields::Named(fields_named) => fields_named
+                .named
+                .iter()
+                .filter_map(|f| f.ident.clone())
+                .filter(|ident| {
+                    let name = ident.to_string();
+                    !matches!(
+                        name.as_str(),
+                        "id" | "created_at" | "updated_at" | "deleted_at"
+                    )
+                })
+                .collect(),
+            _ => vec![],
+        },
         _ => vec![],
     }
 }
@@ -378,54 +389,69 @@ fn extract_field_names(input: &DeriveInput) -> Vec<syn::Ident> {
 /// Get the type of a specific field from the struct
 fn get_field_type<'a>(input: &'a DeriveInput, field_name: &syn::Ident) -> Option<&'a syn::Type> {
     match &input.data {
-        Data::Struct(data_struct) => {
-            match &data_struct.fields {
-                Fields::Named(fields_named) => {
-                    fields_named.named.iter()
-                        .find(|f| f.ident.as_ref() == Some(field_name))
-                        .map(|f| &f.ty)
-                }
-                _ => None,
-            }
-        }
+        Data::Struct(data_struct) => match &data_struct.fields {
+            Fields::Named(fields_named) => fields_named
+                .named
+                .iter()
+                .find(|f| f.ident.as_ref() == Some(field_name))
+                .map(|f| &f.ty),
+            _ => None,
+        },
         _ => None,
     }
 }
 
 /// Generate Create struct fields (non-optional types)
-fn generate_create_struct_fields(field_names: &[syn::Ident], input: &DeriveInput) -> Vec<proc_macro2::TokenStream> {
-    field_names.iter().map(|name| {
-        if let Some(field_type) = get_field_type(input, name) {
-            quote! { pub #name: #field_type }
-        } else {
-            quote! { pub #name: String }
-        }
-    }).collect()
+fn generate_create_struct_fields(
+    field_names: &[syn::Ident],
+    input: &DeriveInput,
+) -> Vec<proc_macro2::TokenStream> {
+    field_names
+        .iter()
+        .map(|name| {
+            if let Some(field_type) = get_field_type(input, name) {
+                quote! { pub #name: #field_type }
+            } else {
+                quote! { pub #name: String }
+            }
+        })
+        .collect()
 }
 
 /// Generate Update struct fields (optional types for partial updates)
-fn generate_update_struct_fields(field_names: &[syn::Ident], input: &DeriveInput) -> Vec<proc_macro2::TokenStream> {
-    field_names.iter().map(|name| {
-        if let Some(field_type) = get_field_type(input, name) {
-            quote! { pub #name: Option<#field_type> }
-        } else {
-            quote! { pub #name: Option<String> }
-        }
-    }).collect()
+fn generate_update_struct_fields(
+    field_names: &[syn::Ident],
+    input: &DeriveInput,
+) -> Vec<proc_macro2::TokenStream> {
+    field_names
+        .iter()
+        .map(|name| {
+            if let Some(field_type) = get_field_type(input, name) {
+                quote! { pub #name: Option<#field_type> }
+            } else {
+                quote! { pub #name: Option<String> }
+            }
+        })
+        .collect()
 }
 
 /// Simple pluralization helper
-/// 
+///
 /// Converts singular nouns to plural form using basic English rules:
 /// - Words ending in 'y' -> replace 'y' with 'ies' (e.g., "city" -> "cities")
 /// - Words ending in 's', 'sh', 'ch', 'x', 'z' -> add 'es' (e.g., "box" -> "boxes")
 /// - All other words -> add 's' (e.g., "user" -> "users")
 fn pluralize(word: &str) -> String {
     if word.ends_with('y') {
-        format!("{}ies", &word[..word.len()-1])
+        format!("{}ies", &word[..word.len() - 1])
     } else if word.ends_with('z') && !word.ends_with("zz") {
-        format!("{}zes", word)  // Double single 'z' before adding 'es'
-    } else if word.ends_with("s") || word.ends_with("sh") || word.ends_with("ch") || word.ends_with("x") || word.ends_with("z") {
+        format!("{}zes", word) // Double single 'z' before adding 'es'
+    } else if word.ends_with("s")
+        || word.ends_with("sh")
+        || word.ends_with("ch")
+        || word.ends_with("x")
+        || word.ends_with("z")
+    {
         format!("{}es", word)
     } else {
         format!("{}s", word)
@@ -506,12 +532,10 @@ fn validate_primary_key_field(input: &DeriveInput) -> Result<(), syn::Error> {
 /// Validate that all field types are supported
 fn validate_field_types(input: &DeriveInput) -> Result<(), syn::Error> {
     let fields = match &input.data {
-        Data::Struct(data_struct) => {
-            match &data_struct.fields {
-                Fields::Named(fields_named) => &fields_named.named,
-                _ => return Ok(()),
-            }
-        }
+        Data::Struct(data_struct) => match &data_struct.fields {
+            Fields::Named(fields_named) => &fields_named.named,
+            _ => return Ok(()),
+        },
         _ => return Ok(()),
     };
 
@@ -521,18 +545,17 @@ fn validate_field_types(input: &DeriveInput) -> Result<(), syn::Error> {
                 syn::Type::Path(type_path) => {
                     if let Some(segment) = type_path.path.segments.last() {
                         let type_name = segment.ident.to_string();
-                        
+
                         // List of supported types
                         let supported_types = [
-                            "i16", "i32", "i64", "u16", "u32", "u64",
-                            "f32", "f64", "bool", "String", "str",
-                            "DateTime", "Date", "Time", "Uuid",
-                            "Vec", "Option"
+                            "i16", "i32", "i64", "u16", "u32", "u64", "f32", "f64", "bool",
+                            "String", "str", "DateTime", "Date", "Time", "Uuid", "Vec", "Option",
                         ];
-                        
-                        if !supported_types.contains(&type_name.as_str()) &&
-                           !type_name.starts_with("Option") &&
-                           !type_name.starts_with("Vec") {
+
+                        if !supported_types.contains(&type_name.as_str())
+                            && !type_name.starts_with("Option")
+                            && !type_name.starts_with("Vec")
+                        {
                             return Err(syn::Error::new_spanned(
                                 &field.ty,
                                 format!("Unsupported field type '{}' for field '{}'.\n\nSupported types:\n- Integers: i16, i32, i64, u16, u32, u64\n- Floats: f32, f64\n- Text: String, &str\n- Boolean: bool\n- Time: DateTime<Utc>, Date, Time\n- Optional: Option<T> for any supported type T\n- Collections: Vec<T> for supported types T\n- UUID: Uuid (with uuid feature)\n\nFor complex types, consider using JSON serialization with String fields.",
@@ -614,9 +637,9 @@ mod tests {
 
     #[test]
     fn test_pluralize_z_ending() {
-        assert_eq!(pluralize("quiz"), "quizzes");  // Single z -> double z + es
-        assert_eq!(pluralize("buzz"), "buzzes");   // Double z -> just + es
-        assert_eq!(pluralize("jazz"), "jazzes");   // Double z -> just + es
+        assert_eq!(pluralize("quiz"), "quizzes"); // Single z -> double z + es
+        assert_eq!(pluralize("buzz"), "buzzes"); // Double z -> just + es
+        assert_eq!(pluralize("jazz"), "jazzes"); // Double z -> just + es
     }
 
     #[test]

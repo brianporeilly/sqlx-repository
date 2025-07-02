@@ -1,22 +1,20 @@
 //! Benchmarks for basic CRUD operations
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use sqlx_repository::{SearchParams, SortOrder, RecordScope};
+use sqlx_repository::{RecordScope, SearchParams, SortOrder};
 use std::collections::HashMap;
 
 fn bench_search_params_creation(c: &mut Criterion) {
     c.bench_function("search_params_default", |b| {
-        b.iter(|| {
-            black_box(SearchParams::default())
-        })
+        b.iter(|| black_box(SearchParams::default()))
     });
-    
+
     c.bench_function("search_params_with_filters", |b| {
         b.iter(|| {
             let mut filters = HashMap::new();
             filters.insert("status".to_string(), "active".to_string());
             filters.insert("department".to_string(), "engineering".to_string());
-            
+
             black_box(SearchParams {
                 query: Some("test query".to_string()),
                 filters,
@@ -32,7 +30,7 @@ fn bench_search_params_creation(c: &mut Criterion) {
 
 fn bench_postgres_query_building(c: &mut Criterion) {
     use sqlx_repository::backends::postgres::PostgresBackend;
-    
+
     c.bench_function("postgres_build_select_simple", |b| {
         b.iter(|| {
             black_box(PostgresBackend::build_select_query(
@@ -44,7 +42,7 @@ fn bench_postgres_query_building(c: &mut Criterion) {
             ))
         })
     });
-    
+
     c.bench_function("postgres_build_select_complex", |b| {
         b.iter(|| {
             black_box(PostgresBackend::build_select_query(
@@ -56,7 +54,7 @@ fn bench_postgres_query_building(c: &mut Criterion) {
             ))
         })
     });
-    
+
     c.bench_function("postgres_build_insert", |b| {
         b.iter(|| {
             black_box(PostgresBackend::build_insert_query(
@@ -66,7 +64,7 @@ fn bench_postgres_query_building(c: &mut Criterion) {
             ))
         })
     });
-    
+
     c.bench_function("postgres_build_update", |b| {
         b.iter(|| {
             black_box(PostgresBackend::build_update_query(
@@ -80,22 +78,21 @@ fn bench_postgres_query_building(c: &mut Criterion) {
 
 fn bench_error_creation(c: &mut Criterion) {
     use sqlx_repository::RepositoryError;
-    
+
     c.bench_function("error_not_found", |b| {
-        b.iter(|| {
-            black_box(RepositoryError::not_found("User", "id", 123))
-        })
+        b.iter(|| black_box(RepositoryError::not_found("User", "id", 123)))
     });
-    
+
     c.bench_function("error_validation", |b| {
-        b.iter(|| {
-            black_box(RepositoryError::validation("Email is invalid"))
-        })
+        b.iter(|| black_box(RepositoryError::validation("Email is invalid")))
     });
-    
+
     c.bench_function("error_unsupported_feature", |b| {
         b.iter(|| {
-            black_box(RepositoryError::unsupported_feature("full_text_search", "mysql"))
+            black_box(RepositoryError::unsupported_feature(
+                "full_text_search",
+                "mysql",
+            ))
         })
     });
 }
