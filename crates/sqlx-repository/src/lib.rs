@@ -304,7 +304,7 @@ pub mod backends;
 ///
 /// ```rust
 /// use sqlx_repository::prelude::*;
-/// 
+///
 /// // Now you have access to:
 /// // - Repository trait
 /// // - SearchParams, SearchResult, SortOrder, RecordScope
@@ -313,14 +313,14 @@ pub mod backends;
 /// ```
 pub mod prelude {
     //! Common imports for sqlx-repository users
-    
-    pub use crate::{Repository, SearchParams, SearchResult, SortOrder, RecordScope};
+
+    pub use crate::{RecordScope, Repository, SearchParams, SearchResult, SortOrder};
     pub use crate::{RepositoryError, RepositoryResult};
-    
+
     #[cfg(feature = "macros")]
     #[cfg_attr(docsrs, doc(cfg(feature = "macros")))]
     pub use crate::Repository as RepositoryDerive;
-    
+
     // Re-export commonly used async-trait for custom implementations
     pub use async_trait::async_trait;
 }
