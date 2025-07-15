@@ -5,7 +5,7 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::{PgPool, migrate::MigrateDatabase, Postgres};
+use sqlx::{PgPool};
 use sqlx_repository::Repository;
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, Repository)]
@@ -77,12 +77,6 @@ async fn create_tables(pool: &PgPool) -> Result<(), sqlx::Error> {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let database_url = "postgres://postgres:password@localhost/sqlx_repository_example";
     
-    // Create database if it doesn't exist
-    if !Postgres::database_exists(database_url).await.unwrap_or(false) {
-        println!("🏗️  Creating database...");
-        Postgres::create_database(database_url).await?;
-    }
-    
     // Connect to database
     let pool = PgPool::connect(database_url).await?;
     
@@ -94,7 +88,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let post_repo = PostRepository::new(pool.clone());
     
     // Create a user
-    let user = user_repo.create(&CreateUser {
+    let user = user_repo.create(CreateUser {
         name: "John Doe".to_string(),
         email: "john@example.com".to_string(),
     }).await?;
@@ -102,7 +96,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("👤 Created user: {} (ID: {})", user.name, user.id);
     
     // Create a post
-    let post = post_repo.create(&CreatePost {
+    let post = post_repo.create(CreatePost {
         title: "My First Post".to_string(),
         content: "This is the content of my first post.".to_string(),
         author_id: user.id,

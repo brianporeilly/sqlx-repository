@@ -13,7 +13,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./crates/sqlx-repository/tests/fixtures:/docker-entrypoint-initdb.d
+      - ./crates/sqlx-repository/tests/fixtures:/docker-entrypoint-initdb.d:Z
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -38,52 +38,6 @@ services:
       timeout: 2s
       retries: 10
 
-  mysql:
-    image: mysql:8.0
-    container_name: sqlx-repository-mysql
-    restart: unless-stopped
-    environment:
-      MYSQL_ROOT_PASSWORD: password
-      MYSQL_DATABASE: sqlx_repository_dev
-      MYSQL_USER: sqlx
-      MYSQL_PASSWORD: password
-    ports:
-      - "3306:3306"
-    volumes:
-      - mysql_data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-ppassword"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  mysql_test:
-    image: mysql:8.0
-    container_name: sqlx-repository-mysql-test
-    restart: "no"
-    environment:
-      MYSQL_ROOT_PASSWORD: password
-      MYSQL_DATABASE: sqlx_repository_test
-      MYSQL_USER: sqlx
-      MYSQL_PASSWORD: password
-    ports:
-      - "3307:3306"
-    tmpfs:
-      - /var/lib/mysql
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-ppassword"]
-      interval: 2s
-      timeout: 2s
-      retries: 10
-
-  sqlite:
-    # SQLite doesn't need a container - we'll use file-based SQLite for testing
-    # This is just a placeholder for documentation
-    image: alpine:latest
-    container_name: sqlx-repository-sqlite-placeholder
-    restart: "no"
-    command: /bin/sh -c "echo 'SQLite uses file-based storage' && sleep infinity"
-
   # Development tools
   adminer:
     image: adminer:latest
@@ -93,14 +47,11 @@ services:
       - "8080:8080"
     depends_on:
       - postgres
-      - mysql
     environment:
       ADMINER_DEFAULT_SERVER: postgres
 
 volumes:
   postgres_data:
-    driver: local
-  mysql_data:
     driver: local
 
 networks:
