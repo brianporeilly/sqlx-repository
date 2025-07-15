@@ -81,13 +81,19 @@ deps: ## Check dependency status
 
 # Docker
 docker-up: ## Start PostgreSQL test database
-	docker-compose up -d postgres
+	docker-compose up -d postgres_test
 
 docker-down: ## Stop PostgreSQL test database
 	docker-compose down
 
 docker-logs: ## View database logs
-	docker-compose logs -f postgres
+	docker-compose logs -f postgres_test
+
+docker-up-dev: ## Start PostgreSQL development database
+	docker-compose up -d postgres
+
+docker-up-both: ## Start both PostgreSQL databases
+	docker-compose up -d postgres postgres_test
 
 # Database management
 db-create: ## Create test database
@@ -97,6 +103,19 @@ db-drop: ## Drop test database
 	docker-compose exec postgres dropdb -U postgres sqlx_repository_test || true
 
 db-reset: db-drop db-create ## Reset test database
+
+# Migration commands
+migrate-dev: ## Run migrations against development database
+	@echo "Running migrations against development database..."
+	cd crates/sqlx-repository && DATABASE_URL="postgres://postgres:password@localhost:5432/sqlx_repository_dev" sqlx migrate run --source migrations
+
+migrate-test: ## Run migrations against test database
+	@echo "Running migrations against test database..."
+	cd crates/sqlx-repository && DATABASE_URL="postgres://postgres:password@localhost:5433/sqlx_repository_test" sqlx migrate run --source migrations
+
+migrate-info: ## Show migration status
+	@echo "Migration status for test database:"
+	cd crates/sqlx-repository && DATABASE_URL="postgres://postgres:password@localhost:5433/sqlx_repository_test" sqlx migrate info --source migrations
 
 # CLI development
 cli-build: ## Build CLI tool

@@ -13,7 +13,6 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./crates/sqlx-repository/tests/fixtures:/docker-entrypoint-initdb.d:Z
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
