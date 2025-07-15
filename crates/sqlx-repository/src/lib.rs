@@ -16,6 +16,7 @@
 //! - **Search & pagination** - Flexible search with filtering and pagination
 //! - **Soft delete support** - Configurable soft delete with `deleted_at` field
 //! - **Auto-generated types** - `CreateT` and `UpdateT` structs for mutations
+//! - **Multiple ID types** - Support for `i32`, `i64`, and `Uuid` primary keys
 //! - **PostgreSQL support** - Production-ready PostgreSQL backend
 //! - **Clear error messages** - Helpful compile-time errors with examples
 //!
@@ -188,6 +189,74 @@
 //! # }
 //! ```
 //!
+//! ## UUID Primary Keys
+//!
+//! Use UUID primary keys instead of auto-incrementing integers for globally unique identifiers:
+//!
+//! ```rust
+//! use chrono::{DateTime, Utc};
+//! use serde::{Deserialize, Serialize};
+//! use sqlx_repository::Repository;
+//! use uuid::Uuid;
+//!
+//! #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, Repository)]
+//! #[repository(table = "uuid_users")]
+//! pub struct UuidUser {
+//!     pub id: Uuid,  // UUID primary key
+//!     pub name: String,
+//!     pub email: String,
+//!     pub created_at: DateTime<Utc>,
+//!     pub updated_at: DateTime<Utc>,
+//! }
+//! ```
+//!
+//! UUID primary keys are automatically generated during creation:
+//!
+//! ```rust,no_run
+//! # use chrono::{DateTime, Utc};
+//! # use serde::{Deserialize, Serialize};
+//! # use sqlx_repository::Repository;
+//! # use uuid::Uuid;
+//! # #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, Repository)]
+//! # #[repository(table = "uuid_users")]
+//! # pub struct UuidUser {
+//! #     pub id: Uuid,
+//! #     pub name: String,
+//! #     pub email: String,
+//! #     pub created_at: DateTime<Utc>,
+//! #     pub updated_at: DateTime<Utc>,
+//! # }
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! # let pool = sqlx::PgPool::connect("postgres://localhost/mydb").await?;
+//! let repo = UuidUserRepository::new(pool);
+//!
+//! // UUID is generated automatically
+//! let user = repo.create(CreateUuidUser {
+//!     name: "Alice".to_string(),
+//!     email: "alice@example.com".to_string(),
+//! }).await?;
+//!
+//! println!("Created user with UUID: {}", user.id);
+//!
+//! // Use UUID for lookups
+//! let found_user = repo.find_by_id(user.id).await?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! **Benefits of UUID primary keys:**
+//! - Globally unique identifiers
+//! - No database round-trip for ID generation
+//! - Better for distributed systems
+//! - Non-sequential for security
+//!
+//! **Cargo.toml requirements:**
+//! ```toml
+//! [dependencies]
+//! sqlx-repository = { version = "0.1", features = ["uuid"] }
+//! uuid = { version = "1.0", features = ["v4"] }
+//! ```
+//!
 //! ## Supported Types
 //!
 //! | Category | Types | Example |
@@ -232,7 +301,7 @@
 //! - **Rust**: 1.70+
 //! - **Database**: PostgreSQL 12+ (MySQL and SQLite coming in future versions)
 //! - **Required derives**: `Debug`, `Clone`, `Serialize`, `Deserialize`, `sqlx::FromRow`, `Repository`
-//! - **Required field**: `id: i32` (i64 and Uuid support coming soon)
+//! - **Primary key field**: `id` with supported types: `i32`, `i64`, or `Uuid`
 //!
 //! ## Examples
 //!
@@ -240,6 +309,7 @@
 //!
 //! - [Basic Usage](https://github.com/brianporeilly/sqlx-repository/blob/main/examples/basic_usage.rs) - CRUD operations and search
 //! - [Soft Delete](https://github.com/brianporeilly/sqlx-repository/blob/main/examples/soft_delete.rs) - Soft delete functionality
+//! - [UUID Usage](https://github.com/brianporeilly/sqlx-repository/blob/main/examples/uuid_usage.rs) - UUID primary keys
 //! - [Migrations](https://github.com/brianporeilly/sqlx-repository/blob/main/examples/migrations.rs) - Database setup and migrations
 //!
 //! ## License
@@ -291,6 +361,20 @@ pub use sqlx_repository_macros::Repository;
 pub mod error;
 pub mod repository;
 pub mod search;
+
+/// ID generation trait for different primary key types
+pub trait IdGenerator<T> {
+    /// Generate a new ID of the specified type
+    fn generate() -> T;
+}
+
+// Implementation for UUID (only available with uuid feature)
+#[cfg(feature = "uuid")]
+impl IdGenerator<uuid::Uuid> for uuid::Uuid {
+    fn generate() -> uuid::Uuid {
+        uuid::Uuid::new_v4()
+    }
+}
 
 // Backend implementations
 pub mod backends;

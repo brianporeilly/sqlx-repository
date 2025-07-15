@@ -87,7 +87,7 @@ fn derive_repository_impl(input: DeriveInput) -> Result<TokenStream, syn::Error>
 
     // Comprehensive validation first
     validate_input_struct(&input)?;
-    validate_primary_key_field(&input)?;
+    let primary_key_type = validate_and_extract_primary_key_type(&input)?;
     
     // Extract attributes with fallback to pluralized struct name
     let table_name = extract_table_name(&input.attrs)
@@ -135,7 +135,7 @@ fn derive_repository_impl(input: DeriveInput) -> Result<TokenStream, syn::Error>
         }
 
         #[async_trait::async_trait]
-        impl sqlx_repository::Repository<#name> for #repository_name {
+        impl sqlx_repository::Repository<#name, #primary_key_type> for #repository_name {
             type CreateType = #create_type;
             type UpdateType = #update_type;
 
@@ -161,25 +161,43 @@ fn derive_repository_impl(input: DeriveInput) -> Result<TokenStream, syn::Error>
 
             async fn create(&self, data: Self::CreateType) -> sqlx_repository::RepositoryResult<#name> {
                 let field_names = vec![#(stringify!(#field_names)),*];
-                let placeholders: Vec<String> = (1..=field_names.len()).map(|i| format!("${}", i)).collect();
+                
+                // For UUID primary keys, we need to generate the ID and include it in the insert
+                let (all_field_names, all_placeholders, needs_uuid_generation) = if stringify!(#primary_key_type) == "Uuid" {
+                    let mut names = vec!["id"];
+                    names.extend(field_names.iter().cloned());
+                    let placeholders: Vec<String> = (1..=names.len()).map(|i| format!("${}", i)).collect();
+                    (names, placeholders, true)
+                } else {
+                    // For integer primary keys, use auto-increment (exclude id from insert)
+                    let placeholders: Vec<String> = (1..=field_names.len()).map(|i| format!("${}", i)).collect();
+                    (field_names.clone(), placeholders, false)
+                };
                 
                 let query = if Self::soft_delete_enabled() {
                     format!(
                         "INSERT INTO {} ({}, created_at, updated_at) VALUES ({}, NOW(), NOW()) RETURNING *",
                         Self::table_name(),
-                        field_names.join(", "),
-                        placeholders.join(", ")
+                        all_field_names.join(", "),
+                        all_placeholders.join(", ")
                     )
                 } else {
                     format!(
                         "INSERT INTO {} ({}) VALUES ({}) RETURNING *",
                         Self::table_name(),
-                        field_names.join(", "),
-                        placeholders.join(", ")
+                        all_field_names.join(", "),
+                        all_placeholders.join(", ")
                     )
                 };
 
                 let mut query_builder = sqlx::query_as(&query);
+                
+                // Bind UUID first if needed
+                if needs_uuid_generation {
+                    query_builder = query_builder.bind(<#primary_key_type as sqlx_repository::IdGenerator<#primary_key_type>>::generate());
+                }
+                
+                // Bind all other fields
                 #(
                     query_builder = query_builder.bind(&data.#field_names);
                 )*
@@ -190,7 +208,7 @@ fn derive_repository_impl(input: DeriveInput) -> Result<TokenStream, syn::Error>
                     .map_err(sqlx_repository::RepositoryError::from)
             }
 
-            async fn update(&self, id: i32, data: Self::UpdateType) -> sqlx_repository::RepositoryResult<Option<#name>> {
+            async fn update(&self, id: #primary_key_type, data: Self::UpdateType) -> sqlx_repository::RepositoryResult<Option<#name>> {
                 let mut set_parts = Vec::new();
                 let mut has_updates = false;
                 
@@ -459,48 +477,52 @@ fn validate_input_struct(input: &DeriveInput) -> Result<(), syn::Error> {
     }
 }
 
-/// Validate that the struct has a primary key field (id: i32)
-fn validate_primary_key_field(input: &DeriveInput) -> Result<(), syn::Error> {
+/// Validate that the struct has a primary key field and extract its type
+fn validate_and_extract_primary_key_type(input: &DeriveInput) -> Result<syn::Type, syn::Error> {
     let fields = match &input.data {
         Data::Struct(data_struct) => {
             match &data_struct.fields {
                 Fields::Named(fields_named) => &fields_named.named,
-                _ => return Ok(()), // Already validated in validate_input_struct
+                _ => return Err(syn::Error::new_spanned(input, "Repository derive only supports structs with named fields")),
             }
         }
-        _ => return Ok(()), // Already validated in validate_input_struct
+        _ => return Err(syn::Error::new_spanned(input, "Repository derive only supports structs")),
     };
 
-    let mut has_id_field = false;
     for field in fields {
         if let Some(field_name) = &field.ident {
             if field_name == "id" {
-                has_id_field = true;
-                // Check if it's i32
+                // Validate the ID type is supported
                 if let syn::Type::Path(type_path) = &field.ty {
                     if let Some(segment) = type_path.path.segments.last() {
-                        if segment.ident != "i32" {
-                            return Err(syn::Error::new_spanned(
-                                &field.ty,
-                                format!("Primary key 'id' must be of type 'i32', found '{}'.\n\nCurrently supported: i32\nFuture versions will support: i64, Uuid\n\nExample:\npub struct User {{\n    pub id: i32,  // ← Must be i32\n    pub name: String,\n}}", 
-                                segment.ident)
-                            ));
+                        let type_name = &segment.ident;
+                        match type_name.to_string().as_str() {
+                            "i32" | "i64" | "Uuid" => {
+                                return Ok(field.ty.clone());
+                            }
+                            _ => {
+                                return Err(syn::Error::new_spanned(
+                                    &field.ty,
+                                    format!("Primary key 'id' must be of type 'i32', 'i64', or 'Uuid', found '{}'.\n\nSupported types:\n- i32: Auto-incrementing integer (default)\n- i64: Large auto-incrementing integer\n- Uuid: UUID v4 (requires uuid feature)\n\nExample:\npub struct User {{\n    pub id: i32,  // or i64, or Uuid\n    pub name: String,\n}}", 
+                                    type_name)
+                                ));
+                            }
                         }
                     }
+                } else {
+                    return Err(syn::Error::new_spanned(
+                        &field.ty,
+                        "Primary key 'id' must be a simple type (i32, i64, or Uuid)"
+                    ));
                 }
-                break;
             }
         }
     }
 
-    if !has_id_field {
-        return Err(syn::Error::new_spanned(
-            input,
-            "Repository structs must have a primary key field named 'id: i32'.\n\nExample:\n#[derive(Repository)]\n#[repository(table = \"users\")]\npub struct User {\n    pub id: i32,  // ← Add this field\n    pub name: String,\n    pub email: String,\n}"
-        ));
-    }
-
-    Ok(())
+    Err(syn::Error::new_spanned(
+        input,
+        "Repository structs must have a primary key field named 'id'.\n\nSupported types: i32, i64, Uuid\n\nExample:\n#[derive(Repository)]\n#[repository(table = \"users\")]\npub struct User {\n    pub id: i32,  // ← Add this field\n    pub name: String,\n    pub email: String,\n}"
+    ))
 }
 
 /// Validate that all field types are supported

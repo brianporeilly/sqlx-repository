@@ -31,6 +31,10 @@ path = "../../examples/soft_delete.rs"
 name = "migrations"
 path = "../../examples/migrations.rs"
 
+[[example]]
+name = "uuid_usage"
+path = "../../examples/uuid_usage.rs"
+
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
@@ -38,7 +42,7 @@ targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
 # Use workspace versions for shared deps
-sqlx = { workspace = true, features = ["postgres", "runtime-tokio-rustls", "macros", "chrono", "migrate"] }
+sqlx = { workspace = true, features = ["postgres", "runtime-tokio-rustls", "macros", "chrono", "migrate", "uuid"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 async-trait = { workspace = true }
 serde = { workspace = true, features = ["derive"] }

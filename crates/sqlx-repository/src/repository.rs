@@ -7,9 +7,10 @@ use sqlx::FromRow;
 
 /// Core repository trait providing CRUD operations and search functionality
 #[async_trait]
-pub trait Repository<T>: Send + Sync
+pub trait Repository<T, ID = i32>: Send + Sync
 where
     T: for<'r> FromRow<'r, sqlx::postgres::PgRow> + Send + Unpin,
+    ID: Send + Sync + Clone + 'static + for<'e> sqlx::Encode<'e, sqlx::Postgres> + for<'d> sqlx::Decode<'d, sqlx::Postgres> + sqlx::Type<sqlx::Postgres>,
 {
     /// Type for creating new entities
     type CreateType: Send;
@@ -38,11 +39,11 @@ where
     /// Create a new entity
     async fn create(&self, data: Self::CreateType) -> RepositoryResult<T>;
     /// Update an existing entity by ID
-    async fn update(&self, id: i32, data: Self::UpdateType) -> RepositoryResult<Option<T>>;
+    async fn update(&self, id: ID, data: Self::UpdateType) -> RepositoryResult<Option<T>>;
 
     // Default implementations using PostgreSQL (will be abstracted in Phase 2)
     /// Find an entity by its ID
-    async fn find_by_id(&self, id: i32) -> RepositoryResult<Option<T>> {
+    async fn find_by_id(&self, id: ID) -> RepositoryResult<Option<T>> {
         let query = if Self::soft_delete_enabled() {
             format!("SELECT * FROM {} WHERE id = $1 AND deleted_at IS NULL", Self::table_name())
         } else {
@@ -71,7 +72,7 @@ where
     }
 
     /// Delete an entity by ID (soft delete if enabled, otherwise hard delete)
-    async fn delete(&self, id: i32) -> RepositoryResult<bool> {
+    async fn delete(&self, id: ID) -> RepositoryResult<bool> {
         let query = if Self::soft_delete_enabled() {
             format!("UPDATE {} SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1 AND deleted_at IS NULL", Self::table_name())
         } else {
@@ -175,7 +176,7 @@ where
     }
 
     /// Restore a soft-deleted entity by ID
-    async fn restore(&self, id: i32) -> RepositoryResult<Option<T>>
+    async fn restore(&self, id: ID) -> RepositoryResult<Option<T>>
     where
         Self: Sized,
     {
@@ -196,7 +197,7 @@ where
     }
 
     /// Permanently delete an entity by ID (ignores soft delete setting)
-    async fn hard_delete(&self, id: i32) -> RepositoryResult<bool> {
+    async fn hard_delete(&self, id: ID) -> RepositoryResult<bool> {
         let result = sqlx::query(&format!("DELETE FROM {} WHERE id = $1", Self::table_name()))
             .bind(id)
             .execute(self.pool())
